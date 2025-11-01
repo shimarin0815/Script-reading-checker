@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>台本読み上げ時間チェッカー</title>
+    
+    <style>
+        /* * ページ全体の基本的な設定
+         */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #1a1a1a; /* ダークモードの背景色 */
+            color: #e0e0e0; /* 明るい灰色の文字色 */
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+
+        /* * 全体を囲むコンテナ（箱）
+         */
+        .container {
+            width: 100%;
+            max-width: 800px; /* 最大幅を指定 */
+            background-color: #2c2c2c; /* 少し明るい背景色 */
+            border-radius: 12px; /* 角を丸くする */
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3); /* 影をつけて立体的に */
+            padding: 30px;
+            box-sizing: border-box;
+        }
+
+        /* * アプリのタイトル
+         */
+        h1 {
+            text-align: center;
+            color: #ffffff;
+            margin-top: 0;
+            margin-bottom: 25px;
+            font-size: 1.8rem; /* 少し大きめの文字 */
+        }
+
+        /* * 結果表示エリア（3つを横並びにする）
+         */
+        .results {
+            display: flex;
+            justify-content: space-around; /* 均等に配置 */
+            gap: 15px; /* ボックス間のすき間 */
+            margin-bottom: 25px;
+            flex-wrap: wrap; /* スマホで縦並びにする */
+        }
+
+        /* * 各結果のボックス（標準・早口・ゆっくり）
+         */
+        .result-box {
+            flex: 1; /* 同じ幅で広がる */
+            min-width: 120px; /* 最小幅 */
+            background-color: #3a3a3a; /* ボックスの背景色 */
+            border-radius: 10px; /* 角を丸く */
+            padding: 20px;
+            text-align: center;
+            transition: background-color 0.3s ease; /* 色が変わるアニメーション */
+        }
+        
+        /* * ボックスのラベル（標準、早口など）
+         */
+        .result-box .label {
+            display: block;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #a0a0a0; /* 少し薄い色 */
+            margin-bottom: 10px;
+        }
+
+        /* * 時間表示（00分00秒）
+         */
+        .result-box .time {
+            font-size: 1.7rem;
+            font-weight: 700;
+            color: #4CAF50; /* アクセントカラー（緑） */
+        }
+
+        /* * テキストエリア（台本を入力する場所）
+         */
+        #scriptInput {
+            width: 100%;
+            height: 300px; /* 高さを指定 */
+            box-sizing: border-box; /* paddingやborderを含めて幅100%にする */
+            border: 2px solid #4a4a4a; /* 枠線 */
+            border-radius: 10px; /* 角を丸く */
+            background-color: #222222; /* テキストエリアの背景 */
+            color: #e0e0e0; /* 入力する文字の色 */
+            padding: 15px;
+            font-size: 1rem;
+            line-height: 1.6;
+            resize: vertical; /* 縦方向だけリサイズ可能 */
+            transition: border-color 0.3s ease;
+        }
+
+        /* * テキストエリアが選択された時（フォーカス）
+         */
+        #scriptInput:focus {
+            outline: none; /* 青い枠線を消す */
+            border-color: #4CAF50; /* アクセントカラーに変化 */
+            box-shadow: 0 0 10px rgba(76, 175, 80, 0.3); /* ほんのり光らせる */
+        }
+    </style>
+    </head>
+<body>
+
+    <div class="container">
+        <h1>台本読み上げ時間チェッカー</h1>
+
+        <div class="results">
+            <div class="result-box">
+                <span class="label">ゆっくり (250文字/分)</span>
+                <span class="time" id="slowTime">00分00秒</span>
+            </div>
+            <div class="result-box">
+                <span class="label">標準 (300文字/分)</span>
+                <span class="time" id="normalTime">00分00秒</span>
+            </div>
+            <div class="result-box">
+                <span class="label">早口 (400文字/分)</span>
+                <span class="time" id="fastTime">00分00秒</span>
+            </div>
+        </div>
+
+        <textarea id="scriptInput" placeholder="ここに台本を貼り付けてください..."></textarea>
+    </div>
+
+    <script>
+        // 「分速文字数（WPM）」をあらかじめ決めておく
+        // この数字を変えれば、計算の基準を変えられます
+        const WPM_SLOW = 250;   // ゆっくり
+        const WPM_NORMAL = 300; // 標準
+        const WPM_FAST = 400;   // 早口
+
+        // 必要なHTML要素（部品）をJavaScriptで使えるように準備する
+        const scriptInput = document.getElementById('scriptInput');
+        const slowTimeEl = document.getElementById('slowTime');
+        const normalTimeEl = document.getElementById('normalTime');
+        const fastTimeEl = document.getElementById('fastTime');
+
+        /**
+         * 秒数を「MM分SS秒」の形に整える関数
+         * @param {number} totalSeconds - 合計の秒数
+         * @returns {string} - "00分00秒" 形式の文字列
+         */
+        function formatTime(totalSeconds) {
+            // 例: 125秒 → 125 / 60 = 2.08... の「2」が分
+            const minutes = Math.floor(totalSeconds / 60);
+            
+            // 例: 125秒 → 125 % 60 = 5 の「5」が秒
+            const seconds = Math.floor(totalSeconds % 60);
+
+            // padStart(2, '0') は「2桁にして、足りなければ左に0を詰める」という意味
+            // 例: 5 → "05", 12 → "12"
+            const formattedMinutes = String(minutes).padStart(2, '0');
+            const formattedSeconds = String(seconds).padStart(2, '0');
+
+            return `${formattedMinutes}分${formattedSeconds}秒`;
+        }
+
+        /**
+         * 時間を計算して、画面に表示する関数
+         */
+        function updateTimes() {
+            // テキストエリアに入力された文字を取得
+            const text = scriptInput.value;
+            // 文字数を数える
+            const charCount = text.length;
+
+            // 文字数が0なら、すべて00分00秒にして処理を終わる
+            if (charCount === 0) {
+                slowTimeEl.textContent = "00分00秒";
+                normalTimeEl.textContent = "00分00秒";
+                fastTimeEl.textContent = "00分00秒";
+                return; // ここで関数を終了
+            }
+
+            // (文字数 ÷ 分速文字数) で「分」が計算できる
+            // それに60をかけると「秒」になる
+            const timeSlow = (charCount / WPM_SLOW) * 60;
+            const timeNormal = (charCount / WPM_NORMAL) * 60;
+            const timeFast = (charCount / WPM_FAST) * 60;
+
+            // 計算した秒数を、上で作った formatTime 関数できれいな形にして、画面に表示する
+            slowTimeEl.textContent = formatTime(timeSlow);
+            normalTimeEl.textContent = formatTime(timeNormal);
+            fastTimeEl.textContent = formatTime(timeFast);
+        }
+
+        // テキストエリア（scriptInput）で「input」（文字入力や貼り付け）が行われるたびに、
+        // updateTimes 関数を呼び出すように「見張り番」をセットする
+        scriptInput.addEventListener('input', updateTimes);
+        
+    </script>
+    </body>
+</html>
